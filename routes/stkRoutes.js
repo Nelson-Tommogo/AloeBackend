@@ -89,52 +89,48 @@ router.post('/stkpush', getToken, async (req, res) => {
 router.post('/callback', async (req, res) => {
     try {
         const callbackData = req.body;
-        const result_code = callbackData.Body.stkCallback.ResultCode;
+        const stkCallback = callbackData.Body.stkCallback;
+        const resultCode = stkCallback.ResultCode;
+        const resultDesc = stkCallback.ResultDesc;
 
-        if (result_code !== 0) {
-            const error_message = callbackData.Body.stkCallback.ResultDesc;
-            return res.status(400).json({
-                ResultCode: result_code,
-                ResultDesc: error_message,
-            });
+        const merchantRequestID = stkCallback.MerchantRequestID;
+        const checkoutRequestID = stkCallback.CheckoutRequestID;
+
+        let transactionUpdate = {
+            resultCode,
+            resultDesc,
+            status: resultCode === 0 ? 'completed' : 'failed',
+            callbackReceivedAt: new Date(),
+            rawCallback: callbackData
+        };
+
+        if (resultCode === 0) {
+            // Success - extract metadata
+            const metadata = stkCallback.CallbackMetadata;
+            transactionUpdate.mpesaReceiptNumber = metadata.Item.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
+            transactionUpdate.amount = metadata.Item.find(i => i.Name === 'Amount')?.Value;
+            transactionUpdate.phoneNumber = metadata.Item.find(i => i.Name === 'PhoneNumber')?.Value;
+            transactionUpdate.transactionDate = new Date();
         }
 
-        const body = callbackData.Body.stkCallback.CallbackMetadata;
-        const amount = body.Item.find((obj) => obj.Name === "Amount")?.Value;
-        const mpesaCode = body.Item.find((obj) => obj.Name === "MpesaReceiptNumber")?.Value;
-        const phone = body.Item.find((obj) => obj.Name === "PhoneNumber")?.Value;
+        // Update transaction based on CheckoutRequestID
+        const transaction = await Transaction.findOneAndUpdate(
+            { checkoutRequestID },
+            { $set: transactionUpdate },
+            { new: true, upsert: true } // Creates one if not found (optional)
+        );
 
-        // Check if transaction already exists using mpesaReceiptNumber
-        const existingTransaction = await Transaction.findOne({ mpesaReceiptNumber: mpesaCode });
-
-        if (existingTransaction) {
-            return res.status(400).json({
-                message: 'Transaction already processed.',
-                transaction: existingTransaction,
-            });
-        }
-
-        const transaction = new Transaction({
-            amount,
-            mpesaReceiptNumber: mpesaCode,
-            phoneNumber: phone,
-            rawCallback: callbackData,
-            status: 'completed',
-        });
-
-        await transaction.save();
-
-        return res.status(200).json({
-            message: "Callback processed and transaction saved.",
-            transaction: { amount, mpesaCode, phone },
+        res.status(200).json({
+            message: 'Callback processed',
+            status: transaction.status,
+            transaction,
         });
     } catch (error) {
-        console.error("Callback Error:", error);
-        return res.status(500).json({
-            error: "An error occurred while processing the callback.",
-        });
+        console.error('Callback Error:', error);
+        res.status(500).json({ error: 'Failed to process callback' });
     }
 });
+
 
 
 router.post('/stkquery', getToken, async (req, res) => {
