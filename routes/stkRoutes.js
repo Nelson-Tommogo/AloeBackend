@@ -89,14 +89,25 @@ router.post('/stkpush', getToken, async (req, res) => {
 router.post('/callback', async (req, res) => {
     try {
         const callbackData = req.body;
-        const stkCallback = callbackData.Body.stkCallback;
-        const resultCode = stkCallback.ResultCode;
-        const resultDesc = stkCallback.ResultDesc;
+        console.log('📥 Received STK Callback:', JSON.stringify(callbackData, null, 2));
 
-        const merchantRequestID = stkCallback.MerchantRequestID;
-        const checkoutRequestID = stkCallback.CheckoutRequestID;
+        const stkCallback = callbackData?.Body?.stkCallback;
+        if (!stkCallback) {
+            return res.status(400).json({ error: 'Invalid callback structure' });
+        }
 
-        let transactionUpdate = {
+        const {
+            MerchantRequestID: merchantRequestID,
+            CheckoutRequestID: checkoutRequestID,
+            ResultCode: resultCode,
+            ResultDesc: resultDesc,
+            CallbackMetadata: metadata
+        } = stkCallback;
+
+        // Base update object
+        const transactionUpdate = {
+            merchantRequestID,
+            checkoutRequestID,
             resultCode,
             resultDesc,
             status: resultCode === 0 ? 'completed' : 'failed',
@@ -104,32 +115,35 @@ router.post('/callback', async (req, res) => {
             rawCallback: callbackData
         };
 
-        if (resultCode === 0) {
-            // Success - extract metadata
-            const metadata = stkCallback.CallbackMetadata;
-            transactionUpdate.mpesaReceiptNumber = metadata.Item.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
-            transactionUpdate.amount = metadata.Item.find(i => i.Name === 'Amount')?.Value;
-            transactionUpdate.phoneNumber = metadata.Item.find(i => i.Name === 'PhoneNumber')?.Value;
-            transactionUpdate.transactionDate = new Date();
+        // Only add metadata fields on success
+        if (resultCode === 0 && metadata) {
+            const extract = (name) =>
+                metadata.Item.find((i) => i.Name === name)?.Value;
+
+            transactionUpdate.mpesaReceiptNumber = extract('MpesaReceiptNumber');
+            transactionUpdate.amount = extract('Amount');
+            transactionUpdate.phoneNumber = extract('PhoneNumber');
+            transactionUpdate.transactionDate = new Date(); // You can set this to Safaricom timestamp if needed
         }
 
-        // Update transaction based on CheckoutRequestID
+        // Find existing or insert new
         const transaction = await Transaction.findOneAndUpdate(
             { checkoutRequestID },
             { $set: transactionUpdate },
-            { new: true, upsert: true } // Creates one if not found (optional)
+            { new: true, upsert: true }
         );
 
         res.status(200).json({
-            message: 'Callback processed',
+            message: '✅ Callback processed successfully',
             status: transaction.status,
             transaction,
         });
     } catch (error) {
-        console.error('Callback Error:', error);
-        res.status(500).json({ error: 'Failed to process callback' });
+        console.error('❌ Callback Error:', error.message);
+        res.status(500).json({ error: 'Failed to process callback', details: error.message });
     }
 });
+
 
 
 
