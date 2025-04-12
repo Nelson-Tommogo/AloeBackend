@@ -1,8 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import bodyParser from 'body-parser';
 import mongoose from 'mongoose';
-import cors from 'cors';
+import bodyParser from 'body-parser';
 
 import stkRoutes from './routes/stkRoutes.js'; 
 import transactionRoutes from './routes/transactionRoutes.js';
@@ -20,58 +19,11 @@ mongoose.connect(DATABASE_URL)
     process.exit(1);
   });
 
-const whitelist = [
-  'https://aloefloraproducts.com',
-  'http://aloefloraproducts.com',
-  'http://localhost:3000',
-  'https://localhost:3000',
-  'https://aloeflora-lg66.onrender.com' // Add your Render frontend URL
-];
-
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (whitelist.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log('❌ Blocked by CORS:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
-  credentials: true,
-  optionsSuccessStatus: 204,
-  preflightContinue: false
-};
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
-
-// Additional security headers
+// Basic security headers (recommended to keep these)
 app.use((req, res, next) => {
-  // Set CORS headers
-  const origin = req.headers.origin;
-  if (whitelist.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-  }
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  // Security headers
   res.header('X-Content-Type-Options', 'nosniff');
   res.header('X-Frame-Options', 'DENY');
   res.header('X-XSS-Protection', '1; mode=block');
-  res.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
   next();
 });
 
@@ -94,15 +46,6 @@ app.get('/', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('❌ Server Error:', err.stack);
-  
-  if (err.message.includes('CORS')) {
-    return res.status(403).json({ 
-      error: 'Forbidden',
-      message: 'Cross-origin request blocked',
-      allowedOrigins: whitelist
-    });
-  }
-  
   res.status(500).json({
     error: 'Internal Server Error',
     message: 'Something went wrong on our end'
@@ -111,7 +54,6 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Aloe Flora Limited Server is running on port ${PORT}`);
-  console.log('Allowed origins:', whitelist);
 });
 
 export { app, PORT };
