@@ -13,7 +13,6 @@ const app = express();
 const PORT = process.env.PORT || 9000;
 const DATABASE_URL = process.env.DATABASE_URL;
 
-// Connect to MongoDB Atlas
 mongoose.connect(DATABASE_URL)
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch((error) => {
@@ -21,28 +20,41 @@ mongoose.connect(DATABASE_URL)
     process.exit(1);
   });
 
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+const whitelist = [
+  'https://aloefloraproducts.com',
+  'http://aloefloraproducts.com',
+  'http://localhost:3000',
+  'https://localhost:3000'
+];
 
-app.options('*', cors());
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || whitelist.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('❌ Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true,
+  optionsSuccessStatus: 204,
+  preflightContinue: false
+};
 
-// Middleware
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// API Routes
 app.use('/api', stkRoutes); 
 app.use('/api/transactions', transactionRoutes);
 
-// Home route for testing
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'Aloe Flora Limited Server is up and running!' });
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`🚀 Aloe Flora Limited Server is running on port ${PORT}`);
 });
