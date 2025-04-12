@@ -20,7 +20,8 @@ mongoose.connect(DATABASE_URL)
   });
 
 const allowedOrigins = [
-  'http://localhost:3000',
+  'http://localhost:3000/',
+  'https://localhost:3000',
   'http://localhost:9000',
   'http://aloefloraproducts.com',
   'https://aloefloraproducts.com'
